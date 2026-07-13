@@ -1,0 +1,45 @@
+-- Run this only after the collect-cta Edge Function is deployed.
+-- Replace both placeholder values before running it in the Supabase SQL editor.
+
+select vault.create_secret(
+    'https://YOUR_PROJECT_REF.supabase.co',
+    'signal_chicago_project_url',
+    'Signal Chicago Edge Function base URL'
+);
+
+select vault.create_secret(
+    'REPLACE_WITH_THE_SAME_RANDOM_COLLECTOR_SECRET_USED_BY_THE_EDGE_FUNCTION',
+    'signal_chicago_collector_secret',
+    'Authenticates the private two-minute collector trigger'
+);
+
+do $$
+declare existing_job bigint;
+begin
+    select jobid into existing_job from cron.job where jobname = 'signal-chicago-collect-every-two-minutes';
+    if existing_job is not null then perform cron.unschedule(existing_job); end if;
+
+    perform cron.schedule(
+        'signal-chicago-collect-every-two-minutes',
+        '*/2 * * * *',
+        $job$
+        select net.http_post(
+            url := (
+                select decrypted_secret
+                from vault.decrypted_secrets
+                where name = 'signal_chicago_project_url'
+            ) || '/functions/v1/collect-cta',
+            headers := jsonb_build_object(
+                'content-type', 'application/json',
+                'x-collector-secret', (
+                    select decrypted_secret
+                    from vault.decrypted_secrets
+                    where name = 'signal_chicago_collector_secret'
+                )
+            ),
+            body := '{}'::jsonb
+        );
+        $job$
+    );
+end;
+$$;

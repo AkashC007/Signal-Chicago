@@ -1,0 +1,5 @@
+project_id = "signal-chicago"
+
+[functions.collect-cta]
+verify_jwt = false
+

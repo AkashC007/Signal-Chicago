@@ -9,12 +9,13 @@ The production system must be created under accounts controlled by Akash.
 - `.env`, database files, raw downloads, and API keys remain ignored.
 - CI runs tests and secret scanning on every push.
 
-## Database
+## Database and scheduler
 
-- PostgreSQL project owner is Akash's email/account.
-- `DATABASE_URL` is stored as a managed secret.
+- Supabase project owner is Akash's email/account.
+- Raw prediction tables are protected by row-level security.
+- Public visitors can execute only a bounded summary function.
 - Public visitors never receive direct database credentials.
-- The website uses a read-only API with bounded queries.
+- Fourteen days of raw observations feed permanent daily reliability summaries.
 
 ## Collector
 
@@ -25,6 +26,7 @@ The production system must be created under accounts controlled by Akash.
 
 ## Website and domain
 
+- Cloudflare Pages project owner is Akash's account.
 - Production access is public and requires no third-party sign-in.
 - DNS and domain registration are controlled by Akash.
 - Recommended hostname: `transit.<Akash's domain>`.

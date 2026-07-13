@@ -11,6 +11,7 @@ from cta_reliability.collector import (
 from cta_reliability.config import Settings, load_project_env
 from cta_reliability.gtfs import download_gtfs, load_rail_gtfs
 from cta_reliability.ridership import fetch_ridership, transform_record
+from cta_reliability.schedule_headways import compute_scheduled_headways, upload_scheduled_headways
 from cta_reliability.train_tracker import fetch_arrivals, transform_arrivals
 from cta_reliability.warehouse import (
     connect,
@@ -97,6 +98,18 @@ def export_metrics() -> None:
         print(f"Exported {path}")
 
 
+def sync_scheduled_headways() -> None:
+    settings = Settings.default()
+    load_project_env(settings.project_root)
+    if settings.station_config_path is None:
+        raise RuntimeError("Station cohort path is not configured")
+    station_ids = load_station_cohort(settings.station_config_path)
+    with connect(settings.warehouse_path) as connection:
+        rows = compute_scheduled_headways(connection, station_ids)
+    uploaded = upload_scheduled_headways(rows)
+    print(f"Uploaded {uploaded:,} scheduled headway summaries to Supabase")
+
+
 def summarize() -> None:
     settings = Settings.default()
     with connect(settings.warehouse_path) as connection:
@@ -133,6 +146,7 @@ def main() -> None:
     recurring_parser.add_argument("--runs", type=int, default=None)
     recurring_parser.add_argument("--max-results", type=int, default=5)
     subparsers.add_parser("export-metrics")
+    subparsers.add_parser("sync-scheduled-headways")
     subparsers.add_parser("summarize")
     args = parser.parse_args()
 
@@ -148,6 +162,8 @@ def main() -> None:
         collect_two_minute_runs(args.runs, args.max_results)
     elif args.command == "export-metrics":
         export_metrics()
+    elif args.command == "sync-scheduled-headways":
+        sync_scheduled_headways()
     elif args.command == "summarize":
         summarize()
 

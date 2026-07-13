@@ -4,10 +4,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .DS_Store
+.supabase/
+supabase/.temp/
+supabase/.env.local
 data/raw/*
 data/processed/*
 data/warehouse/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/warehouse/.gitkeep
-

@@ -1,68 +1,102 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  FALLBACK_DASHBOARD,
+  chicagoTimestamp,
+  fetchLiveDashboard,
+  hasLiveDataConfig,
+  routeMeta,
+  type DashboardPayload,
+} from "../lib/signal-data";
 
-type RouteMetric = {
-  code: string;
-  name: string;
-  color: string;
-  predictions: number;
-  stations: number;
-  wait: number;
-  scheduled: number;
-};
+type ConnectionMode = "demo" | "loading" | "live" | "retrying";
 
-const routes: RouteMetric[] = [
-  { code: "Red", name: "Red Line", color: "#c60c30", predictions: 15, stations: 3, wait: 10.54, scheduled: 13.33 },
-  { code: "Blue", name: "Blue Line", color: "#00a1de", predictions: 1, stations: 1, wait: 1.73, scheduled: 0 },
-  { code: "G", name: "Green Line", color: "#009b3a", predictions: 22, stations: 5, wait: 12.79, scheduled: 9.09 },
-  { code: "Brn", name: "Brown Line", color: "#62361b", predictions: 1, stations: 1, wait: 0.65, scheduled: 0 },
-  { code: "Org", name: "Orange Line", color: "#f9461c", predictions: 6, stations: 2, wait: 16.04, scheduled: 16.67 },
-  { code: "Pink", name: "Pink Line", color: "#e27ea6", predictions: 10, stations: 2, wait: 14.93, scheduled: 20 },
-];
+function formatCount(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
+}
 
-const stationRows = [
-  { route: "G", station: "43rd", arrivals: 5, wait: 19.78 },
-  { route: "Org", station: "35th/Archer", arrivals: 5, wait: 18.91 },
-  { route: "Pink", station: "54th/Cermak", arrivals: 5, wait: 18.43 },
-  { route: "Red", station: "63rd", arrivals: 5, wait: 12.71 },
-  { route: "G", station: "35th–Bronzeville–IIT", arrivals: 5, wait: 12.39 },
-  { route: "Pink", station: "18th", arrivals: 5, wait: 11.44 },
-  { route: "G", station: "47th", arrivals: 5, wait: 11.02 },
-  { route: "Red", station: "69th", arrivals: 5, wait: 8.7 },
-];
-
-const routeByCode = Object.fromEntries(routes.map((route) => [route.code, route]));
+function liveLabel(payload: DashboardPayload, mode: ConnectionMode): string {
+  if (mode === "demo") return "Preview data · cloud not connected";
+  if (mode === "loading") return "Connecting to observatory";
+  if (mode === "retrying") return "Live feed retrying";
+  if (payload.freshness.status === "fresh") {
+    const age = payload.freshness.age_minutes ?? 0;
+    return `Live · ${age < 1 ? "under 1" : Math.round(age)} min old`;
+  }
+  if (payload.freshness.status === "delayed") return "Collector delayed";
+  if (payload.freshness.status === "stale") return "Collector stale";
+  return "Waiting for first snapshot";
+}
 
 export default function Home() {
   const [activeRoute, setActiveRoute] = useState("All");
+  const [payload, setPayload] = useState<DashboardPayload>(FALLBACK_DASHBOARD);
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>(
+    hasLiveDataConfig() ? "loading" : "demo",
+  );
+
+  useEffect(() => {
+    if (!hasLiveDataConfig()) return;
+    let mounted = true;
+    let activeController: AbortController | null = null;
+
+    const refresh = async () => {
+      activeController?.abort();
+      activeController = new AbortController();
+      try {
+        const nextPayload = await fetchLiveDashboard(activeController.signal);
+        if (mounted) {
+          setPayload(nextPayload);
+          setConnectionMode("live");
+        }
+      } catch (error) {
+        if (mounted && !(error instanceof DOMException && error.name === "AbortError")) {
+          setConnectionMode("retrying");
+        }
+      }
+    };
+
+    void refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    return () => {
+      mounted = false;
+      activeController?.abort();
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const routes = payload.routes.length ? payload.routes : FALLBACK_DASHBOARD.routes;
+  const stationRows = payload.stations.length ? payload.stations : FALLBACK_DASHBOARD.stations;
   const visibleStations = useMemo(
     () => stationRows.filter((row) => activeRoute === "All" || row.route === activeRoute),
-    [activeRoute],
+    [activeRoute, stationRows],
   );
+  const diagramStations = stationRows.slice(0, 6);
+  const latestTimestamp = payload.freshness.latest_prediction_at;
 
   return (
     <main>
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Signal Chicago home">
           <span className="brandMark">S</span>
-          <span><strong>Signal / Chicago</strong><small>an independent transit data study</small></span>
+          <span><strong>Signal / Chicago</strong><small>CTA reliability observatory</small></span>
         </a>
         <nav aria-label="Primary navigation">
           <a href="#pulse">Network pulse</a>
           <a href="#stations">Stations</a>
           <a href="#method">Method</a>
         </nav>
-        <span className="liveStamp"><i /> Snapshot complete</span>
+        <span className={`liveStamp ${payload.freshness.status}`}><i />{liveLabel(payload, connectionMode)}</span>
       </header>
 
       <section className="hero" id="top">
         <div className="heroCopy">
-          <p className="eyebrow">FIELD NOTE 001 · JUL 10, 2026 · 3:37 PM CT</p>
+          <p className="eyebrow">FIELD NOTE / {chicagoTimestamp(latestTimestamp)}</p>
           <h1>Chicago trains,<br /><em>read between the lines.</em></h1>
           <p className="lede">
-            A working data platform that combines CTA schedules, live arrival predictions,
-            and twenty-five years of ridership history—built to make reliability visible.
+            A continuously updated reliability observatory that records CTA arrival predictions,
+            measures how those predictions move, and makes service gaps visible.
           </p>
           <div className="heroActions">
             <a className="primaryButton" href="#pulse">Read the network pulse <span>↓</span></a>
@@ -71,75 +105,96 @@ export default function Home() {
         </div>
 
         <div className="loopCard" aria-label="Observed routes diagram">
-          <div className="loopHeader"><span>OBSERVED NETWORK</span><b>6 / 8 lines</b></div>
+          <div className="loopHeader">
+            <span>OBSERVED NETWORK</span>
+            <b>{payload.coverage.observed_routes || 8} / 8 lines</b>
+          </div>
           <div className="routeDiagram">
             <div className="track" />
-            {[
-              ["18th", "Pink", "01"], ["35th–Bronzeville–IIT", "G", "02"],
-              ["43rd", "G", "03"], ["47th", "Red", "04"],
-              ["63rd", "Red", "05"], ["69th", "Red", "06"],
-            ].map(([station, route, number]) => (
-              <div className="diagramStop" key={`${station}-${route}`}>
-                <span className="stopDot" style={{ background: routeByCode[route]?.color }} />
-                <b>{station}</b><small>{routeByCode[route]?.name}</small><i>{number}</i>
-              </div>
-            ))}
+            {diagramStations.map((row, index) => {
+              const meta = routeMeta(row.route);
+              return (
+                <div className="diagramStop" key={`${row.station_id}-${row.route}`}>
+                  <span className="stopDot" style={{ background: meta.color }} />
+                  <b>{row.station}</b><small>{meta.name}</small><i>{String(index + 1).padStart(2, "0")}</i>
+                </div>
+              );
+            })}
           </div>
-          <p className="diagramNote">Not a geographic map. Stops shown are part of this prototype’s first collection cohort.</p>
+          <p className="diagramNote">
+            A live dispatch list, not a geographic map. The cohort covers twelve stations and all eight CTA rail lines.
+          </p>
         </div>
       </section>
 
       <section className="ticker" aria-label="Data coverage summary">
         <span><b>9,282</b> ridership days</span>
         <span><b>136,888</b> scheduled stop events</span>
-        <span><b>55</b> live predictions captured</span>
-        <span><b>0</b> failed station requests</span>
+        <span><b>{formatCount(payload.coverage.predictions_total)}</b> predictions captured</span>
+        <span><b>{formatCount(payload.coverage.runs_24h)}</b> collection runs / 24h</span>
       </section>
 
       <section className="pulseSection" id="pulse">
         <div className="sectionIntro">
-          <p className="eyebrow">NETWORK PULSE / ONE CONTROLLED SNAPSHOT</p>
-          <h2>A first look,<br />not a final verdict.</h2>
-          <p>Expected wait is calculated from CTA’s prediction timestamp to its predicted arrival. Longer waits here are observations, not proof of chronic delay.</p>
+          <p className="eyebrow">NETWORK PULSE / LATEST STATION SNAPSHOTS</p>
+          <h2>A live reading,<br />with its limits attached.</h2>
+          <p>
+            Expected wait is the time between CTA&apos;s snapshot and predicted arrival. ETA movement compares the same train across repeated snapshots; lower movement means a steadier prediction.
+          </p>
         </div>
 
         <div className="routeBoard">
           <div className="boardHead">
-            <span>LINE</span><span>ARRIVALS</span><span>STATIONS</span><span>AVG EXPECTED WAIT</span><span>FEED TYPE</span>
+            <span>LINE</span><span>ARRIVALS</span><span>STATIONS</span><span>AVG EXPECTED WAIT</span><span>ETA MOVEMENT / 14D</span>
           </div>
-          {routes.map((route) => (
-            <button className="boardRow" key={route.code} onClick={() => setActiveRoute(route.code)} aria-label={`Show ${route.name} stations`}>
-              <span className="lineName"><i style={{ background: route.color }} />{route.name}</span>
-              <span>{String(route.predictions).padStart(2, "0")}</span>
-              <span>{String(route.stations).padStart(2, "0")}</span>
-              <span className="waitCell"><b style={{ width: `${Math.min(100, route.wait * 5)}%`, background: route.color }} />{route.wait.toFixed(1)} min</span>
-              <span>{route.scheduled ? `${route.scheduled.toFixed(0)}% scheduled` : "live only"}</span>
-            </button>
-          ))}
+          {routes.map((route) => {
+            const meta = routeMeta(route.code);
+            return (
+              <button className="boardRow" key={route.code} onClick={() => setActiveRoute(route.code)} aria-label={`Show ${meta.name} stations`}>
+                <span className="lineName"><i style={{ background: meta.color }} />{meta.name}</span>
+                <span>{String(route.predictions).padStart(2, "0")}</span>
+                <span>{String(route.stations).padStart(2, "0")}</span>
+                <span className="waitCell"><b style={{ width: `${Math.min(100, route.wait * 5)}%`, background: meta.color }} />{route.wait.toFixed(1)} min</span>
+                <span>
+                  {route.revision == null ? "building baseline" : `±${route.revision.toFixed(1)} min`}
+                  {route.service_gap_index == null ? "" : ` · SGI ${route.service_gap_index.toFixed(2)}`}
+                </span>
+              </button>
+            );
+          })}
         </div>
+      </section>
+
+      <section className="metricExplainer" aria-label="Reliability metric definitions">
+        <article><span>01</span><b>Prediction stability</b><p>How much a train&apos;s promised arrival time changes while riders wait. Smaller revisions are steadier.</p></article>
+        <article><span>02</span><b>Predicted service gap</b><p>Minutes between consecutive predicted trains going the same direction from the same platform.</p></article>
+        <article><span>03</span><b>Service Gap Index</b><p>Predicted gap divided by scheduled headway. A value above 1.0 means the observed gap is larger than planned.</p></article>
       </section>
 
       <section className="stationsSection" id="stations">
         <div className="stationHeader">
           <div><p className="eyebrow">STATION DISPATCH</p><h2>Where the wait stretched.</h2></div>
           <div className="filterGroup" aria-label="Filter station observations by line">
-            {["All", "Red", "G", "Org", "Pink"].map((code) => (
+            {["All", ...routes.map((route) => route.code)].map((code) => (
               <button key={code} className={activeRoute === code ? "active" : ""} onClick={() => setActiveRoute(code)}>
-                {code === "All" ? "All observed" : routeByCode[code].name}
+                {code === "All" ? "All observed" : routeMeta(code).name}
               </button>
             ))}
           </div>
         </div>
         <div className="stationGrid">
-          {visibleStations.length ? visibleStations.map((row, index) => (
-            <article className="stationCard" key={`${row.route}-${row.station}`}>
-              <div className="stationIndex">{String(index + 1).padStart(2, "0")}</div>
-              <span className="routePill" style={{ background: routeByCode[row.route].color }}>{routeByCode[row.route].name}</span>
-              <h3>{row.station}</h3>
-              <div className="stationMetric"><strong>{row.wait.toFixed(1)}</strong><span>min<br />expected wait</span></div>
-              <p>{row.arrivals} upcoming arrivals in the station’s latest collected snapshot.</p>
-            </article>
-          )) : <p className="emptyState">This route was observed at Clark/Lake only in the initial sample.</p>}
+          {visibleStations.length ? visibleStations.map((row, index) => {
+            const meta = routeMeta(row.route);
+            return (
+              <article className="stationCard" key={`${row.route}-${row.station_id}`}>
+                <div className="stationIndex">{String(index + 1).padStart(2, "0")}</div>
+                <span className="routePill" style={{ background: meta.color }}>{meta.name}</span>
+                <h3>{row.station}</h3>
+                <div className="stationMetric"><strong>{row.wait.toFixed(1)}</strong><span>min<br />expected wait</span></div>
+                <p>{row.arrivals} upcoming arrivals · {row.delayed.toFixed(0)}% currently marked delayed by CTA.</p>
+              </article>
+            );
+          }) : <p className="emptyState">No current arrivals for this route in the monitored cohort.</p>}
         </div>
       </section>
 
@@ -147,15 +202,15 @@ export default function Home() {
         <div className="methodQuote">
           <span className="quoteMark">“</span>
           <blockquote>Reliability is a story over time—not a score from one snapshot.</blockquote>
-          <p>That sentence is a product rule. This dashboard refuses to turn a thin sample into a dramatic claim.</p>
+          <p>That sentence is a product rule. Signal Chicago keeps the raw evidence long enough to calculate stability, then preserves compact daily summaries.</p>
         </div>
         <div className="pipeline">
-          <p className="eyebrow">THE DATA JOURNEY</p>
+          <p className="eyebrow">THE TWO-MINUTE DATA JOURNEY</p>
           {[
-            ["01", "Collect", "Official ridership, GTFS schedules, and Train Tracker predictions."],
-            ["02", "Validate", "Schema checks, reconciled totals, timestamps, and relationship tests."],
-            ["03", "Model", "Route, station, schedule, and timestamped prediction tables in SQL."],
-            ["04", "Explain", "Metrics labeled by source and limitations shown beside the result."],
+            ["01", "Collect", "A protected Supabase function requests CTA predictions for twelve stations."],
+            ["02", "Validate", "Timestamps, station coverage, flags, and errors are checked before loading."],
+            ["03", "Compare", "Repeated ETAs become revision and service-gap measurements in PostgreSQL."],
+            ["04", "Publish", "The public site requests read-only summaries and refreshes once per minute."],
           ].map(([number, title, copy]) => (
             <div className="pipelineStep" key={number}><span>{number}</span><b>{title}</b><p>{copy}</p></div>
           ))}
@@ -165,16 +220,16 @@ export default function Home() {
       <section className="buildLog">
         <p className="eyebrow">FROM THE BUILD LOG</p>
         <div className="logGrid">
-          <article><time>15:28:59</time><b>The first signal</b><p>Clark/Lake returned a valid prediction. The timestamp format differed from CTA’s older documentation, so the parser learned both.</p></article>
-          <article><time>15:37:10</time><b>Ten stations, zero failures</b><p>A bounded collection run captured 50 predictions and wrote an audit record for every request.</p></article>
-          <article><time>NEXT</time><b>Let time accumulate</b><p>Recurring snapshots will turn this point-in-time view into a defensible reliability study.</p></article>
+          <article><time>FOUNDATION</time><b>Twelve stations, all eight lines</b><p>The first cohort balances route coverage, terminals, transfer stations, airport service, and an Illinois Tech connection.</p></article>
+          <article><time>LIVE SYSTEM</time><b>Two-minute evidence</b><p>Each successful run writes predictions and an audit record. Partial station failures remain visible instead of silently disappearing.</p></article>
+          <article><time>FREE CLOUD</time><b>Raw detail, compact history</b><p>Fourteen days of raw predictions support stability analysis; daily reliability summaries remain for long-term comparisons.</p></article>
         </div>
       </section>
 
       <footer>
         <div><strong>Signal / Chicago</strong><p>Designed and engineered by Akash Chenchugan.</p></div>
         <p>Independent educational project. Not affiliated with or endorsed by the Chicago Transit Authority.</p>
-        <a href="#top">Back to top ↑</a>
+        <a href="https://github.com/AkashC007/Signal-Chicago" target="_blank" rel="noreferrer">View source ↗</a>
       </footer>
     </main>
   );

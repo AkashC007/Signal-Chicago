@@ -5,8 +5,8 @@ built with official Chicago Transit Authority and City of Chicago data. Signal
 Chicago tracks how train arrival predictions change over time and compares
 predicted service gaps with scheduled service.
 
-> Current phase: validated development pipeline and visual prototype. Continuous
-> cloud collection and the public domain are the next production milestones.
+> Current phase: validated local pipeline plus a deployment-ready free-cloud
+> architecture. Supabase and Cloudflare account connection are the next production milestones.
 
 ## Why this project
 
@@ -26,7 +26,8 @@ The finished platform will answer practical questions such as:
 2. **Scheduled service:** CTA GTFS files -> normalized schedule and station models.
 3. **Real-time ingestion:** CTA Train Tracker snapshots -> raw/cleaned tables.
 4. **Analytics layer:** dbt models, data-quality tests, and documented KPIs.
-5. **Delivery:** dashboard, Docker services, orchestration, CI, and cloud deployment.
+5. **Delivery:** Supabase scheduled collection and rollups, a Cloudflare-hosted
+   dashboard, CI, and a personally controlled domain.
 
 SQLite keeps milestone one easy to run anywhere. PostgreSQL, Airflow, and dbt will
 be introduced when they add demonstrable engineering value rather than only
@@ -85,6 +86,8 @@ Collector safeguards and interpretation limits are in
 The approved product definition and delivery plan are in
 [`docs/PRODUCT_BRIEF.md`](docs/PRODUCT_BRIEF.md) and
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
+The free Supabase and Cloudflare deployment runbook is in
+[`docs/FREE_CLOUD_SETUP.md`](docs/FREE_CLOUD_SETUP.md).
 
 ## Credential safety
 
@@ -102,6 +105,7 @@ CTA API key, Socrata token, password, or cloud credential.
 - [x] Bounded multi-station collection with run auditing
 - [x] Route and station snapshot metric exports
 - [ ] Weather enrichment
-- [ ] Orchestrated recurring snapshot collection
+- [x] Deployment-ready two-minute recurring collection
 - [ ] dbt analytics models and tests
-- [ ] Dashboard and cloud deployment
+- [x] Live-data dashboard integration and free-cloud configuration
+- [ ] Connect Supabase and Cloudflare accounts and publish the custom domain
