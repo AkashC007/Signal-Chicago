@@ -162,7 +162,7 @@ async function persistSnapshot(input: {
   predictions: PredictionInput[];
   errors: CollectionError[];
   succeeded: number;
-}): Promise<unknown> {
+}): Promise<Record<string, unknown>> {
   const supabaseUrl = requiredEnv("SUPABASE_URL");
   const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/record_cta_snapshot`, {
@@ -187,7 +187,7 @@ async function persistSnapshot(input: {
     const detail = (await response.text()).slice(0, 300);
     throw new Error(`Snapshot persistence failed (${response.status}): ${detail}`);
   }
-  return response.json();
+  return (await response.json()) as Record<string, unknown>;
 }
 
 Deno.serve(async (request) => {
