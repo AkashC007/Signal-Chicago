@@ -1,0 +1,18 @@
+{
+  "cohort_name": "observatory-v1",
+  "description": "Twelve stations selected for route coverage, geography, transfer activity, and one personal Illinois Tech connection.",
+  "stations": [
+    { "station_id": 40380, "name": "Clark/Lake", "reason": "Downtown transfer hub serving six observed routes" },
+    { "station_id": 41400, "name": "Roosevelt", "reason": "South Loop transfer between Red, Green, and Orange" },
+    { "station_id": 40900, "name": "Howard", "reason": "North terminal serving Red, Purple, and Yellow" },
+    { "station_id": 41320, "name": "Belmont", "reason": "North Side transfer serving Red, Brown, and Purple" },
+    { "station_id": 40890, "name": "O'Hare", "reason": "Airport terminal on the Blue Line" },
+    { "station_id": 40450, "name": "95th/Dan Ryan", "reason": "South terminal on the Red Line" },
+    { "station_id": 41290, "name": "Kimball", "reason": "Northwest terminal on the Brown Line" },
+    { "station_id": 40140, "name": "Dempster-Skokie", "reason": "Yellow Line terminal" },
+    { "station_id": 40580, "name": "54th/Cermak", "reason": "Pink Line terminal" },
+    { "station_id": 40120, "name": "35th/Archer", "reason": "Southwest Orange Line station" },
+    { "station_id": 41120, "name": "35th-Bronzeville-IIT", "reason": "Green Line station connected to Illinois Tech" },
+    { "station_id": 40020, "name": "Harlem/Lake", "reason": "West terminal on the Green Line" }
+  ]
+}
